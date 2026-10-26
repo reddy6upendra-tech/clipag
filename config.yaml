@@ -1,0 +1,89 @@
+app:
+  host: "127.0.0.1"
+  port: 8000
+  work_dir: "work"
+  outputs_dir: "outputs"
+  fonts_dir: "fonts"
+  log_file: "app.log"
+
+ingest:
+  max_height: 1080
+  audio_sample_rate: 16000
+  audio_channels: 1
+
+transcription:
+  model: "small" # options: "base", "small", "medium"
+  compute_type: "int8"
+  device: "cpu"
+  vad_filter: true
+  beam_size: 1
+
+llm:
+  provider: "gemini" # gemini, openai_compatible, ollama
+  default_model: "gemini-2.5-flash"
+  fallback_models: ["gemini-1.5-flash", "gemini-2.0-flash"]
+  rpm_limit: 10
+  max_retries: 5
+  temperature: 0.3
+  target_clips: 6
+  min_clips: 5
+  min_clip_duration: 20
+  max_clip_duration: 60
+  chunk_duration_minutes: 20
+
+reframing:
+  target_width: 1080
+  target_height: 1920
+  sample_fps: 1.5
+  smoothing_window: 15
+  max_pan_speed_px_per_sec: 250
+  min_speaker_hold_sec: 2.0
+  no_face_mode: "auto" # "auto", "center_crop", "blurred_fit"
+
+rendering:
+  preset: "ultrafast"
+  fps: 30
+  target_lufs: -14.0
+  fade_duration: 0.3
+  video_codec: "libx264"
+  audio_codec: "aac"
+
+caption_styles:
+  bold_yellow:
+    name: "Bold Yellow (Reels Pop)"
+    font_name: "Noto Sans"
+    font_size: 78
+    bold: true
+    normal_color: "&H00FFFFFF" # BGR: White
+    highlight_color: "&H0000E5FF" # BGR: Vibrant Yellow
+    outline_color: "&H00000000" # Black outline
+    outline_width: 5
+    shadow_width: 3
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  beast_red:
+    name: "Punchy Neon"
+    font_name: "Noto Sans"
+    font_size: 82
+    bold: true
+    normal_color: "&H00FFFFFF"
+    highlight_color: "&H002BF776" # Neon green/cyan highlight
+    outline_color: "&H00111111"
+    outline_width: 5
+    shadow_width: 4
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  cyber_cyan:
+    name: "Cyber Cyan"
+    font_name: "Noto Sans"
+    font_size: 76
+    bold: true
+    normal_color: "&H00E0E0E0"
+    highlight_color: "&H00FFFF00" # Cyan highlight
+    outline_color: "&H00000000"
+    outline_width: 5
+    shadow_width: 3
+    words_per_line: 3
+    bottom_margin_percent: 22

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Reels Clipper - Studio Edition</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">🎬</div>
+        <div>
+          <h1>AI Reels Clipper <span class="edition-pill">Studio</span></h1>
+          <p class="tagline">Convert long podcasts, talks & vlogs into 9:16 captioned viral reels on CPU</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="system-status" id="systemStatus">
+          <span class="status-dot"></span>
+          <span id="statusText">Checking system...</span>
+        </div>
+        <button type="button" class="btn-history" id="recentJobsToggleBtn" onclick="toggleRecentJobsModal()">
+          🕒 Recent Jobs (<span id="recentJobsCount">0</span>)
+        </button>
+      </div>
+    </header>
+
+    <!-- Rights & Legal Notice Banner -->
+    <div class="notice-banner">
+      <span class="notice-icon">⚠️</span>
+      <span class="notice-text">
+        <strong>Notice:</strong> Please ensure you have the necessary rights and permissions for any video you download, transcribe, and process.
+      </span>
+    </div>
+
+    <!-- Main Workflow Card -->
+    <main class="main-card">
+      <!-- Input Source Selector -->
+      <section class="section-input">
+        <div class="tabs">
+          <button type="button" class="tab-btn active" id="tabUrlBtn" onclick="switchTab('url')">
+            🔗 YouTube / Web URL
+          </button>
+          <button type="button" class="tab-btn" id="tabFileBtn" onclick="switchTab('file')">
+            📁 Upload Local Video
+          </button>
+        </div>
+
+        <!-- URL Input View -->
+        <div class="tab-content" id="urlContent">
+          <div class="input-group">
+            <label for="videoUrl">Video URL</label>
+            <input type="url" id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+            <span class="input-hint">Paste any YouTube URL or direct MP4 link up to 1080p (supports 2+ hr podcasts).</span>
+          </div>
+        </div>
+
+        <!-- File Upload View -->
+        <div class="tab-content hidden" id="fileContent">
+          <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" accept="video/mp4,video/mkv,video/webm,video/mov" class="hidden">
+            <div class="drop-icon">📤</div>
+            <div class="drop-text" id="dropText">Drag & drop your video here or <span>Browse files</span></div>
+            <div class="drop-sub" id="dropSub">Supports MP4, MOV, MKV, WebM up to 1080p</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Options Panel -->
+      <section class="section-options">
+        <div class="options-grid">
+          <div class="option-item">
+            <label for="numClips">Number of Reels</label>
+            <select id="numClips">
+              <option value="5">5 Reels</option>
+              <option value="6" selected>6 Reels (Timeline Distributed)</option>
+              <option value="8">8 Reels (Full Podcast)</option>
+              <option value="10">10 Reels</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="languageSelect">Audio Language</label>
+            <select id="languageSelect">
+              <option value="auto" selected>Auto-detect (English/Mixed)</option>
+              <option value="te">Telugu (తెలుగు)</option>
+              <option value="hi">Hindi (हिन्दी)</option>
+              <option value="en">English</option>
+              <option value="ta">Tamil (தமிழ்)</option>
+              <option value="kn">Kannada (ಕನ್ನಡ)</option>
+              <option value="ml">Malayalam (മലയാളം)</option>
+              <option value="es">Spanish</option>
+            </select>
+            <span class="input-hint">Selecting Telugu/Hindi forces correct script spelling.</span>
+          </div>
+
+          <div class="option-item">
+            <label for="whisperModel">Transcription Model (CPU)</label>
+            <select id="whisperModel">
+              <option value="small" selected>small (Recommended for Indian Languages)</option>
+              <option value="base">base (5x Ultra-Fast for English)</option>
+              <option value="medium">medium (Deep Multilingual)</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="captionStyle">Caption Style Preset</label>
+            <select id="captionStyle">
+              <option value="bold_yellow" selected>Bold Yellow (Reels Pop)</option>
+              <option value="beast_red">Punchy Neon (MrBeast Vibe)</option>
+              <option value="cyber_cyan">Cyber Cyan (Clean Tech)</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="captionPosition">Caption Position</label>
+            <select id="captionPosition">
+              <option value="bottom" selected>Lower Third (Reels / TikTok Safe)</option>
+              <option value="center">Center Screen (High Focus)</option>
+            </select>
+          </div>
+
+          <div class="option-item">
+            <label for="captionFontSize">Caption Size</label>
+            <select id="captionFontSize">
+              <option value="78" selected>Standard (78px)</option>
+              <option value="68">Compact (68px)</option>
+              <option value="86">Large & Bold (86px)</option>
+            </select>
+          </div>
+
+          <div class="option-item full-width">
+            <label for="geminiModel">AI Brain Model</label>
+            <select id="geminiModel">
+              <option value="gemini-2.5-flash" selected>gemini-2.5-flash (Fast & Structured)</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            </select>
+            <span class="input-hint">If no Gemini key is set, the system automatically uses smart local heuristic selection.</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary" id="startBtn" onclick="startGeneration()">
+          ✨ Generate Viral Reels
+        </button>
+      </section>
+
+      <!-- Live Progress & Queue Section -->
+      <section class="section-progress hidden" id="progressSection">
+        <!-- Queue Alert if applicable -->
+        <div class="queue-banner hidden" id="queueBanner">
+          <span class="queue-icon">⏳</span>
+          <div class="queue-content">
+            <h4 id="queueTitle">Waiting in Queue</h4>
+            <p id="queueSubtitle">Another job is currently running on CPU. Your video will process automatically next.</p>
+          </div>
+        </div>
+
+        <!-- 5-Stage Stepper -->
+        <div class="stepper-container" id="stepperContainer">
+          <div class="step-node" id="step-node-ingest">
+            <div class="step-num">1</div>
+            <div class="step-label">Ingest</div>
+          </div>
+          <div class="step-line" id="step-line-1"></div>
+          <div class="step-node" id="step-node-transcribe">
+            <div class="step-num">2</div>
+            <div class="step-label">Transcribe</div>
+          </div>
+          <div class="step-line" id="step-line-2"></div>
+          <div class="step-node" id="step-node-select">
+            <div class="step-num">3</div>
+            <div class="step-label">AI Hooks</div>
+          </div>
+          <div class="step-line" id="step-line-3"></div>
+          <div class="step-node" id="step-node-render">
+            <div class="step-num">4</div>
+            <div class="step-label">Reframe & Render</div>
+          </div>
+          <div class="step-line" id="step-line-4"></div>
+          <div class="step-node" id="step-node-package">
+            <div class="step-num">5</div>
+            <div class="step-label">Package</div>
+          </div>
+        </div>
+
+        <div class="progress-header">
+          <div class="progress-title" id="progressTitle">Processing Video...</div>
+          <div class="progress-pct" id="progressPct">0%</div>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-details" id="progressDetails">Initializing pipeline...</div>
+
+        <!-- Come Back Later & Notification Card -->
+        <div class="come-back-box" id="comeBackBox">
+          <div class="come-back-header">
+            <span class="come-back-icon">☕</span>
+            <div>
+              <strong>Long Video Processing (2+ hours)?</strong>
+              <p>CPU processing can take 15–25 minutes. You don't need to stay on this screen.</p>
+            </div>
+          </div>
+          <div class="come-back-actions">
+            <button type="button" class="btn-copy-link" id="copyJobLinkBtn" onclick="copyJobShareLink()">
+              🔗 Copy "Come Back Later" Link
+            </button>
+            <div class="notify-input-group">
+              <input type="text" id="notifyContactInput" placeholder="Enter WhatsApp # or Email">
+              <button type="button" class="btn-notify" id="saveNotifyBtn" onclick="saveNotification()">
+                🔔 Ping Me
+              </button>
+            </div>
+          </div>
+          <div class="notify-status hidden" id="notifyStatus"></div>
+        </div>
+      </section>
+
+      <!-- Error Message Banner -->
+      <section class="section-error hidden" id="errorSection">
+        <div class="error-box">
+          <div class="error-icon">❌</div>
+          <div class="error-content">
+            <h4 id="errorTitle">Processing Failed</h4>
+            <p id="errorMsg">Details</p>
+            <div class="error-troubleshoot" id="errorTroubleshoot"></div>
+          </div>
+          <button class="btn-secondary" onclick="dismissError()">Dismiss</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Results Section -->
+    <section class="results-container hidden" id="resultsSection">
+      <div class="results-header">
+        <div>
+          <h2>Your Generated Vertical Reels</h2>
+          <p id="resultsSummary">Vertical 9:16 reels ready for Instagram & YouTube Shorts</p>
+        </div>
+        <a id="downloadAllBtn" href="#" class="btn-download-all" download>
+          📦 Download All Reels (.ZIP)
+        </a>
+      </div>
+
+      <!-- Reels Grid -->
+      <div class="reels-grid" id="reelsGrid"></div>
+    </section>
+
+    <!-- Recent Jobs Modal -->
+    <div class="modal-overlay hidden" id="recentJobsModal" onclick="if(event.target===this) toggleRecentJobsModal()">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🕒 Recent Jobs & History</h3>
+          <button class="btn-close" onclick="toggleRecentJobsModal()">✕</button>
+        </div>
+        <div class="modal-body" id="recentJobsList">
+          <p class="empty-hint">No saved jobs found on this browser yet.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

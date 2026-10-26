@@ -1,0 +1,23 @@
+# Environment and secrets
+.env
+*.env
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Work and output directories
+work/
+outputs/
+*.log
+
+# Media / temporary caches
+.cache/
+huggingface/
+*.mp4
+venv/
+.venv/
+

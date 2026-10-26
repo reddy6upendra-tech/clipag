@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.env
+work/
+outputs/
+*.log
+.pytest_cache/
+test_slow.mp4
