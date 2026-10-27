@@ -38,13 +38,33 @@ def get_whisper_model(model_name: Optional[str] = None):
             f"Loading faster-whisper model '{name}' (device={Config.WHISPER_DEVICE}, "
             f"compute={Config.WHISPER_COMPUTE_TYPE}, threads={num_threads}, workers={num_workers})..."
         )
-        _WHISPER_MODEL_CACHE[key] = WhisperModel(
-            name,
-            device=Config.WHISPER_DEVICE,
-            compute_type=Config.WHISPER_COMPUTE_TYPE,
-            cpu_threads=num_threads,
-            num_workers=num_workers,
-        )
+        try:
+            _WHISPER_MODEL_CACHE[key] = WhisperModel(
+                name,
+                device=Config.WHISPER_DEVICE,
+                compute_type=Config.WHISPER_COMPUTE_TYPE,
+                cpu_threads=num_threads,
+                num_workers=num_workers,
+            )
+        except Exception as e:
+            err_str = str(e)
+            if Config.WHISPER_DEVICE == "cuda":
+                logger.warning(
+                    f"Failed to load Whisper on CUDA ({err_str}). "
+                    "Auto-fallback to CPU (int8) to ensure processing succeeds."
+                )
+                Config.WHISPER_DEVICE = "cpu"
+                Config.WHISPER_COMPUTE_TYPE = "int8"
+                key_cpu = f"{name}_cpu_int8_{num_threads}_{num_workers}"
+                _WHISPER_MODEL_CACHE[key_cpu] = WhisperModel(
+                    name,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=num_threads,
+                    num_workers=num_workers,
+                )
+                return _WHISPER_MODEL_CACHE[key_cpu]
+            raise
     return _WHISPER_MODEL_CACHE[key]
 
 def format_timestamp(seconds: float) -> str:

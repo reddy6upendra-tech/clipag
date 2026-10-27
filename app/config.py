@@ -35,6 +35,51 @@ logging.basicConfig(
 
 logger = logging.getLogger("clipag")
 
+def setup_cuda_libraries() -> bool:
+    """
+    On Linux/Google Colab, NVIDIA pip packages (nvidia-cublas-cu12, nvidia-cudnn-cu12)
+    place libcublas.so.12 in site-packages/nvidia/*/lib.
+    This helper dynamically finds and pre-loads them into the process with RTLD_GLOBAL,
+    preventing 'Library libcublas.so.12 is not found or cannot be loaded' errors.
+    """
+    if sys.platform != "linux":
+        return False
+
+    try:
+        import ctypes
+        import site
+
+        site_dirs = site.getsitepackages()
+        if hasattr(site, "getusersitepackages"):
+            site_dirs.append(site.getusersitepackages())
+
+        added_paths = []
+        for sp in site_dirs:
+            nvidia_dir = Path(sp) / "nvidia"
+            if nvidia_dir.exists():
+                for sub in nvidia_dir.iterdir():
+                    lib_dir = sub / "lib"
+                    if lib_dir.exists():
+                        added_paths.append(str(lib_dir))
+                        # Pre-load shared libraries with RTLD_GLOBAL
+                        for so in sorted(lib_dir.glob("*.so*")):
+                            try:
+                                ctypes.CDLL(str(so), mode=ctypes.RTLD_GLOBAL)
+                            except Exception:
+                                pass
+
+        if added_paths:
+            cur_ld = os.environ.get("LD_LIBRARY_PATH", "")
+            os.environ["LD_LIBRARY_PATH"] = ":".join(added_paths) + (f":{cur_ld}" if cur_ld else "")
+            logger.info(f"Loaded NVIDIA CUDA libraries into environment from: {':'.join(added_paths[:2])}...")
+            return True
+    except Exception as e:
+        logger.debug(f"Could not auto-configure NVIDIA CUDA paths: {e}")
+    return False
+
+# Run CUDA library resolution on import
+setup_cuda_libraries()
+
 def detect_device_and_compute() -> tuple[str, str]:
     """Auto-detects optimal hardware: CUDA GPU on Google Colab / servers, or CPU."""
     env_device = os.getenv("WHISPER_DEVICE")
@@ -47,12 +92,31 @@ def detect_device_and_compute() -> tuple[str, str]:
     if yaml_device and yaml_device != "auto":
         return yaml_device, yaml_compute if yaml_compute != "auto" else ("float16" if yaml_device == "cuda" else "int8")
 
-    # Auto-detect CUDA
+    # Auto-detect CUDA and verify cuBLAS availability
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() > 0:
-            logger.info("⚡ CUDA GPU detected! Using 'cuda' device with 'float16' compute.")
-            return "cuda", "float16"
+            # Check if cuBLAS can actually be initialized
+            can_load = True
+            if sys.platform == "linux":
+                import ctypes
+                try:
+                    ctypes.CDLL("libcublas.so.12")
+                except Exception:
+                    try:
+                        ctypes.CDLL("libcublas.so")
+                    except Exception:
+                        can_load = False
+
+            if can_load:
+                logger.info("⚡ CUDA GPU detected and cuBLAS verified! Using 'cuda' device with 'float16'.")
+                return "cuda", "float16"
+            else:
+                logger.warning(
+                    "CUDA GPU detected, but libcublas.so.12 is not found. "
+                    "Auto-fallback to CPU 'int8'. To enable GPU on Colab, run: "
+                    "!pip install nvidia-cublas-cu12 nvidia-cudnn-cu12"
+                )
     except Exception:
         pass
 
