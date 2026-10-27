@@ -78,17 +78,29 @@
           <div class="option-item">
             <label for="numClips">Number of Reels</label>
             <select id="numClips">
+              <option value="0" selected>⚡ Auto (AI Decides based on video length & viral hooks)</option>
+              <option value="3">3 Reels (Quick Highlights)</option>
               <option value="5">5 Reels</option>
-              <option value="6" selected>6 Reels (Timeline Distributed)</option>
-              <option value="8">8 Reels (Full Podcast)</option>
-              <option value="10">10 Reels</option>
+              <option value="8">8 Reels (Full Podcast Highlights)</option>
+              <option value="12">12 Reels (Deep Podcast Coverage)</option>
+              <option value="16">16 Reels</option>
             </select>
+            <span class="input-hint">Auto detects the ideal clip count without forcing artificial filler.</span>
           </div>
 
           <div class="option-item">
-            <label for="languageSelect">Audio Language</label>
+            <label for="captionTask">Caption Language</label>
+            <select id="captionTask">
+              <option value="translate" selected>🌐 Translate to English (Universal Global Reach)</option>
+              <option value="transcribe">🗣️ Keep Original Spoken Audio Language</option>
+            </select>
+            <span class="input-hint">Translates Telugu/Hindi/Spanish dialogue directly into fluent English captions.</span>
+          </div>
+
+          <div class="option-item">
+            <label for="languageSelect">Spoken Audio Language</label>
             <select id="languageSelect">
-              <option value="auto" selected>Auto-detect (English/Mixed)</option>
+              <option value="auto" selected>Auto-detect Spoken Language</option>
               <option value="te">Telugu (తెలుగు)</option>
               <option value="hi">Hindi (हिन्दी)</option>
               <option value="en">English</option>
@@ -97,52 +109,80 @@
               <option value="ml">Malayalam (മലയാളം)</option>
               <option value="es">Spanish</option>
             </select>
-            <span class="input-hint">Selecting Telugu/Hindi forces correct script spelling.</span>
+            <span class="input-hint">Selecting Telugu/Hindi ensures flawless acoustic recognition.</span>
           </div>
 
           <div class="option-item">
-            <label for="whisperModel">Transcription Model (CPU)</label>
+            <label for="whisperModel">Transcription Model (CPU / GPU)</label>
             <select id="whisperModel">
-              <option value="small" selected>small (Recommended for Indian Languages)</option>
+              <option value="small" selected>small (Accurate & Best for Indian Languages)</option>
               <option value="base">base (5x Ultra-Fast for English)</option>
-              <option value="medium">medium (Deep Multilingual)</option>
+              <option value="medium">medium (Deep Multilingual Nuance)</option>
             </select>
           </div>
 
           <div class="option-item">
-            <label for="captionStyle">Caption Style Preset</label>
-            <select id="captionStyle">
-              <option value="bold_yellow" selected>Bold Yellow (Reels Pop)</option>
-              <option value="beast_red">Punchy Neon (MrBeast Vibe)</option>
-              <option value="cyber_cyan">Cyber Cyan (Clean Tech)</option>
+            <label for="captionStyle" onchange="updateCaptionPreview()">Caption Style Preset</label>
+            <select id="captionStyle" onchange="updateCaptionPreview()">
+              <option value="bold_yellow" selected>Bold Yellow (High Energy Reels Pop)</option>
+              <option value="beast_red">MrBeast Red (Punchy Neon Crimson)</option>
+              <option value="cyber_cyan">Cyber Cyan (Tech & Modern Future)</option>
+              <option value="hormozi_bold">Alex Hormozi (Bold All-Caps Yellow/Green)</option>
+              <option value="fire_crimson">Fire Crimson (Fiery Gold & Orange Gradient)</option>
+              <option value="karaoke_gold">Karaoke Gold (Luxury Metallic Gold Glow)</option>
+              <option value="emerald_mint">Emerald Mint (Fresh Aesthetic Vlog Green)</option>
+              <option value="minimal_clean">Minimal Clean (Crisp Pure White Subtitle)</option>
             </select>
           </div>
 
           <div class="option-item">
             <label for="captionPosition">Caption Position</label>
-            <select id="captionPosition">
-              <option value="bottom" selected>Lower Third (Reels / TikTok Safe)</option>
-              <option value="center">Center Screen (High Focus)</option>
+            <select id="captionPosition" onchange="updateCaptionPreview()">
+              <option value="bottom" selected>Lower Third (Reels / TikTok Safe - 22%)</option>
+              <option value="mid_low">Mid-Lower (Safe Above Handle - 35%)</option>
+              <option value="center">Center Screen (High Retention Focus)</option>
+              <option value="upper_third">Upper Third (Top Screen Hook)</option>
             </select>
           </div>
 
           <div class="option-item">
-            <label for="captionFontSize">Caption Size</label>
-            <select id="captionFontSize">
-              <option value="78" selected>Standard (78px)</option>
-              <option value="68">Compact (68px)</option>
-              <option value="86">Large & Bold (86px)</option>
+            <label for="captionFontSize">Caption Text Size</label>
+            <select id="captionFontSize" onchange="updateCaptionPreview()">
+              <option value="58">Compact (58px)</option>
+              <option value="68">Medium (68px)</option>
+              <option value="78" selected>Standard (78px - Recommended)</option>
+              <option value="88">Large & Punchy (88px)</option>
+              <option value="98">Hormozi Extra Large (98px)</option>
             </select>
           </div>
 
-          <div class="option-item full-width">
+          <div class="option-item">
             <label for="geminiModel">AI Brain Model</label>
             <select id="geminiModel">
               <option value="gemini-2.5-flash" selected>gemini-2.5-flash (Fast & Structured)</option>
               <option value="gemini-1.5-flash">gemini-1.5-flash</option>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
             </select>
-            <span class="input-hint">If no Gemini key is set, the system automatically uses smart local heuristic selection.</span>
+            <span class="input-hint">If no Gemini key is set, smart local heuristics run automatically.</span>
+          </div>
+        </div>
+
+        <!-- Live Caption Styling Preview Box -->
+        <div class="caption-preview-card">
+          <div class="preview-header">
+            <span>👁️ Live Caption Preview</span>
+            <span class="preview-tag">9:16 Aspect Ratio Mockup</span>
+          </div>
+          <div class="preview-phone-mockup" id="previewPhone">
+            <div class="preview-safe-overlay">
+              <div class="preview-caption-box" id="previewCaptionBox">
+                <span class="preview-word">NEVER</span>
+                <span class="preview-word">STOP</span>
+                <span class="preview-word active-word" id="previewActiveWord">BUILDING</span>
+                <span class="preview-word">YOUR</span>
+                <span class="preview-word">DREAM</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -158,7 +198,7 @@
           <span class="queue-icon">⏳</span>
           <div class="queue-content">
             <h4 id="queueTitle">Waiting in Queue</h4>
-            <p id="queueSubtitle">Another job is currently running on CPU. Your video will process automatically next.</p>
+            <p id="queueSubtitle">Another job is currently running on CPU/GPU. Your video will process automatically next.</p>
           </div>
         </div>
 
@@ -198,6 +238,33 @@
           <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
         </div>
         <div class="progress-details" id="progressDetails">Initializing pipeline...</div>
+
+        <!-- Live Terminal Screen Below Progress Bar -->
+        <div class="terminal-container" id="terminalContainer">
+          <div class="terminal-header">
+            <div class="terminal-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="terminal-title">
+              <span class="term-icon">💻</span>
+              <span>Live Studio Terminal Console</span>
+              <span class="terminal-live-badge"><span class="pulse-dot"></span> LIVE</span>
+            </div>
+            <div class="terminal-controls">
+              <label class="terminal-autoscroll-label">
+                <input type="checkbox" id="terminalAutoScroll" checked> Auto-scroll
+              </label>
+              <button type="button" class="btn-term-action" onclick="copyTerminalLogs()" title="Copy Logs">📋 Copy</button>
+              <button type="button" class="btn-term-action" onclick="clearTerminalLogs()" title="Clear Terminal">🧹 Clear</button>
+            </div>
+          </div>
+          <div class="terminal-window" id="terminalWindow">
+            <div class="term-line welcome"><span class="term-prompt">clipag@studio:~$</span> pipeline --status initialized --worker cpu-colab-ready</div>
+            <div class="term-line info"><span class="term-time">[00:00:00]</span> <span class="term-tag tag-init">[SYSTEM]</span> Ready to process video streams...</div>
+          </div>
+        </div>
 
         <!-- Come Back Later & Notification Card -->
         <div class="come-back-box" id="comeBackBox">

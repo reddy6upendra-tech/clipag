@@ -39,7 +39,39 @@ def test_api_config():
     assert resp.status_code == 200
     data = resp.json()
     assert "caption_styles" in data
-    assert "bold_yellow" in data["caption_styles"]
+    # Check all 8 styles
+    expected_styles = [
+        "bold_yellow", "beast_red", "cyber_cyan", "hormozi_bold",
+        "fire_crimson", "karaoke_gold", "emerald_mint", "minimal_clean"
+    ]
+    for s in expected_styles:
+        assert s in data["caption_styles"], f"Style {s} missing from /api/config"
+
+    assert "caption_positions" in data
+    assert len(data["caption_positions"]) == 4
+    assert "font_sizes" in data
+    assert len(data["font_sizes"]) == 5
+
+def test_job_submission_dynamic_and_terminal_logs():
+    # Submit job with auto clip count (clips=0) and translation enabled
+    resp = client.post(
+        "/api/jobs",
+        data={
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "clips": "0",
+            "style": "hormozi_bold",
+            "position": "mid_low",
+            "font_size": "88",
+            "task": "translate",
+            "language": "te",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "job_id" in data
+    assert "logs" in data
+    assert len(data["logs"]) >= 1
+    assert "Auto" in data["logs"][0]["message"] or "registered" in data["logs"][0]["message"]
 
 def test_api_doctor():
     resp = client.get("/api/doctor")

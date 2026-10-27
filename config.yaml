@@ -65,7 +65,7 @@ caption_styles:
     bottom_margin_percent: 22
 
   beast_red:
-    name: "Punchy Neon"
+    name: "Punchy Neon (Beast Vibe)"
     font_name: "Noto Sans"
     font_size: 82
     bold: true
@@ -78,7 +78,7 @@ caption_styles:
     bottom_margin_percent: 22
 
   cyber_cyan:
-    name: "Cyber Cyan"
+    name: "Cyber Cyan (Tech Clean)"
     font_name: "Noto Sans"
     font_size: 76
     bold: true
@@ -87,5 +87,70 @@ caption_styles:
     outline_color: "&H00000000"
     outline_width: 5
     shadow_width: 3
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  hormozi_bold:
+    name: "Hormozi Punch (Viral Gold/Lime)"
+    font_name: "Noto Sans"
+    font_size: 86
+    bold: true
+    normal_color: "&H00FFFFFF"
+    highlight_color: "&H0014F0F0" # Neon Lime-Gold
+    outline_color: "&H00000000"
+    outline_width: 6
+    shadow_width: 4
+    words_per_line: 2
+    bottom_margin_percent: 22
+
+  fire_crimson:
+    name: "Fire Crimson (High Impact)"
+    font_name: "Noto Sans"
+    font_size: 80
+    bold: true
+    normal_color: "&H00FFFFFF"
+    highlight_color: "&H000055FF" # Fiery Orange-Red
+    outline_color: "&H00000000"
+    outline_width: 5
+    shadow_width: 3
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  karaoke_gold:
+    name: "Golden Luxury (Warm Glow)"
+    font_name: "Noto Sans"
+    font_size: 78
+    bold: true
+    normal_color: "&H00E6F0FA"
+    highlight_color: "&H0000D7FF" # Deep Gold
+    outline_color: "&H00051428"
+    outline_width: 5
+    shadow_width: 4
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  emerald_mint:
+    name: "Emerald Mint (Fresh Pop)"
+    font_name: "Noto Sans"
+    font_size: 78
+    bold: true
+    normal_color: "&H00FFFFFF"
+    highlight_color: "&H0080FF00" # Vivid Mint Emerald
+    outline_color: "&H00000000"
+    outline_width: 5
+    shadow_width: 3
+    words_per_line: 3
+    bottom_margin_percent: 22
+
+  minimal_clean:
+    name: "Minimalist Aesthetic (Soft Violet)"
+    font_name: "Noto Sans"
+    font_size: 74
+    bold: true
+    normal_color: "&H00FFFFFF"
+    highlight_color: "&H00FF70A0" # Lavender Violet
+    outline_color: "&H00202020"
+    outline_width: 3
+    shadow_width: 2
     words_per_line: 3
     bottom_margin_percent: 22

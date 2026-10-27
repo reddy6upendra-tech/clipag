@@ -101,11 +101,18 @@ def generate_ass_subtitles(
     bottom_margin_pct = style_cfg.get("bottom_margin_percent", 22)
     
     # Configure alignment and vertical margin:
-    # alignment 2 = bottom center; alignment 5 = middle center
-    if position == "center":
+    # ASS alignments: 2 = bottom-center; 5 = middle-center; 8 = top-center
+    pos_lower = (position or "bottom").lower()
+    if pos_lower == "center":
         alignment = 5
         margin_v = 0
-    else:
+    elif pos_lower == "upper_third" or pos_lower == "top":
+        alignment = 8
+        margin_v = int(round(1920 * 0.20)) # 384px from top
+    elif pos_lower == "mid_low":
+        alignment = 2
+        margin_v = int(round(1920 * 0.35)) # 672px from bottom (just below center)
+    else: # "bottom" (Lower third - default)
         alignment = 2
         margin_v = int(round(1920 * (bottom_margin_pct / 100.0)))
     

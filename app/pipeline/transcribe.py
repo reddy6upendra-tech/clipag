@@ -171,12 +171,15 @@ def transcribe_audio(
     job_dir: Path,
     model_name: Optional[str] = None,
     language: Optional[str] = "auto",
+    task: str = "translate",
     force_recompute: bool = False,
     progress_callback: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Transcribes a 16 kHz mono WAV file using faster-whisper.
     Supports GPU acceleration (CUDA) and parallel ~5-minute chunk processing for long podcasts.
+    Supports task='translate' to automatically translate any spoken language (Telugu, Hindi, etc.)
+    into fluent English word-level timestamps and captions.
     Produces transcript.json and transcript.txt with word-level timestamps.
     Caches results by checking if transcript.json already exists.
     """
@@ -185,14 +188,16 @@ def transcribe_audio(
     txt_path = job_dir / "transcript.txt"
     energy_path = job_dir / "audio_energy.json"
     req_lang = (language or "auto").lower()
+    req_task = (task or "translate").lower()
 
     # 1. Check cache
     if not force_recompute and json_path.exists() and txt_path.exists():
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         cached_lang = data.get("requested_language", "auto")
-        if req_lang == "auto" or cached_lang == req_lang:
-            logger.info(f"Transcription cache hit for {audio_path.name} (language: {data.get('language')})")
+        cached_task = data.get("task", "translate")
+        if (req_lang == "auto" or cached_lang == req_lang) and cached_task == req_task:
+            logger.info(f"Transcription cache hit for {audio_path.name} (language: {data.get('language')}, task: {cached_task})")
             if energy_path.exists():
                 with open(energy_path, "r", encoding="utf-8") as f:
                     data["audio_energy"] = json.load(f)
@@ -215,16 +220,17 @@ def transcribe_audio(
     model = get_whisper_model(model_name)
     
     transcribe_kwargs = {
+        "task": req_task,
         "vad_filter": Config.WHISPER_VAD_FILTER,
         "vad_parameters": dict(min_silence_duration_ms=500),
         "word_timestamps": True,
-        "beam_size": 2 if (req_lang not in ("auto", "none", "", "en")) else 1,
+        "beam_size": 2 if (req_lang not in ("auto", "none", "", "en") or req_task == "translate") else 1,
         "best_of": 1,
         "condition_on_previous_text": False,
     }
     if req_lang not in ("auto", "none", ""):
         transcribe_kwargs["language"] = req_lang
-        logger.info(f"Explicitly forcing transcription language to '{req_lang}'")
+        logger.info(f"Explicitly forcing transcription source language to '{req_lang}' (task={req_task})")
 
     # 4. Check for chunking (5-minute chunks for long audio)
     chunks_dir = job_dir / "audio_chunks"
@@ -241,11 +247,13 @@ def transcribe_audio(
 
     if len(chunks) == 1 and chunks[0].get("is_single"):
         # Single-pass transcription for short audio
+        task_label = "transcribing & translating to English" if req_task == "translate" else "transcribing"
         if progress_callback:
-            progress_callback(f"Transcribing audio with faster-whisper ({Config.WHISPER_DEVICE})...", 26)
+            progress_callback(f"{task_label.capitalize()} with faster-whisper ({Config.WHISPER_DEVICE})...", 26)
 
         segments_gen, info = model.transcribe(str(audio_path), **transcribe_kwargs)
-        detected_lang = req_lang if req_lang not in ("auto", "none", "") else info.language
+        source_lang = info.language
+        detected_lang = "en" if req_task == "translate" else (req_lang if req_lang not in ("auto", "none", "") else info.language)
         lang_prob = info.language_probability
         total_dur = info.duration
 
@@ -268,7 +276,7 @@ def transcribe_audio(
                 "end": round(seg.end, 3),
                 "text": seg.text.strip(),
                 "words": seg_words,
-                "language": getattr(seg, "language", detected_lang),
+                "language": detected_lang,
             }
             segments_list.append(seg_dict)
 
@@ -280,14 +288,14 @@ def transcribe_audio(
             if progress_callback and seg_idx % 4 == 0:
                 step_pct = 26 + int(dur_pct * 14)
                 progress_callback(
-                    f"Transcribing: {format_timestamp(seg.end)} / {format_timestamp(total_dur)} ({int(dur_pct * 100)}%)...",
+                    f"Processing speech: {format_timestamp(seg.end)} / {format_timestamp(total_dur)} ({int(dur_pct * 100)}%)...",
                     step_pct,
                 )
     else:
         # Multi-chunk parallel transcription!
         logger.info(
             f"Transcribing {len(chunks)} parallel 5-min chunks using "
-            f"{Config.WHISPER_WORKERS} workers on {Config.WHISPER_DEVICE}..."
+            f"{Config.WHISPER_WORKERS} workers on {Config.WHISPER_DEVICE} (task={req_task})..."
         )
 
         def transcribe_single_chunk(chunk_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -295,6 +303,7 @@ def transcribe_audio(
             offset = chunk_info["start"]
             c_words = []
             c_segments = []
+            c_lang = "en" if req_task == "translate" else (req_lang if req_lang not in ("auto", "none", "") else info.language)
             for seg in seg_gen:
                 seg_words = []
                 if seg.words:
@@ -313,7 +322,7 @@ def transcribe_audio(
                     "end": round(seg.end + offset, 3),
                     "text": seg.text.strip(),
                     "words": seg_words,
-                    "language": getattr(seg, "language", info.language),
+                    "language": c_lang,
                 })
 
             return {
@@ -336,7 +345,7 @@ def transcribe_audio(
                 pct = 25 + int((completed_count / len(chunks)) * 15)
                 if progress_callback:
                     progress_callback(
-                        f"Transcribing parallel chunks: {completed_count}/{len(chunks)} completed ({int(completed_count/len(chunks)*100)}%)...",
+                        f"Processing parallel chunks: {completed_count}/{len(chunks)} completed ({int(completed_count/len(chunks)*100)}%)...",
                         pct,
                     )
                 logger.info(f"Chunk {res['index']+1}/{len(chunks)} finished ({len(res['words'])} words)")
@@ -355,7 +364,8 @@ def transcribe_audio(
                 text_lines.append(f"[{m_s:02d}:{s_s:02d}-{m_e:02d}:{s_e:02d}] {s['text']}")
                 global_seg_idx += 1
 
-        detected_lang = req_lang if req_lang not in ("auto", "none", "") else (chunk_results[0]["detected_lang"] if chunk_results else "en")
+        source_lang = chunk_results[0]["detected_lang"] if chunk_results else "en"
+        detected_lang = "en" if req_task == "translate" else (req_lang if req_lang not in ("auto", "none", "") else source_lang)
         lang_prob = chunk_results[0]["lang_prob"] if chunk_results else 1.0
         total_dur = sum(c["duration"] for c in chunks)
 
@@ -370,6 +380,8 @@ def transcribe_audio(
 
     transcript_data = {
         "language": detected_lang,
+        "source_language": source_lang,
+        "task": req_task,
         "requested_language": req_lang,
         "language_probability": round(lang_prob, 3),
         "duration": round(total_dur, 2),

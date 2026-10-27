@@ -7,7 +7,7 @@ import threading
 from typing import List, Dict, Any, Optional
 from app.config import Config
 from app.llm.client import LLMProvider, ClipCandidate, ClipSelectionResponse
-from app.pipeline.heuristics import find_clips_heuristic
+from app.pipeline.heuristics import find_clips_heuristic, compute_dynamic_target_clips
 
 logger = logging.getLogger("clipag.llm.gemini")
 
@@ -113,12 +113,12 @@ def snap_to_word_boundaries(
 
 def deduplicate_and_rank_clips(clips: List[ClipCandidate], target_clips: int = 6) -> List[ClipCandidate]:
     """Sorts by score, removes overlapping segments (>3s overlap), and selects top N."""
-    # Sort descending by score
     sorted_clips = sorted(clips, key=lambda x: x.score, reverse=True)
     selected: List[ClipCandidate] = []
+    max_count = target_clips if target_clips > 0 else 25
 
     for c in sorted_clips:
-        if len(selected) >= target_clips:
+        if len(selected) >= max_count:
             break
         # Check overlap
         overlap = False
@@ -198,7 +198,7 @@ class GeminiProvider(LLMProvider):
         self,
         transcript_data: Dict[str, Any],
         audio_hints: Optional[Dict[str, Any]] = None,
-        target_clips: int = 6,
+        target_clips: int = 0,
         min_duration: int = 20,
         max_duration: int = 60,
         total_video_duration: Optional[float] = None,
@@ -206,21 +206,30 @@ class GeminiProvider(LLMProvider):
     ) -> List[ClipCandidate]:
         """
         Executes clip selection via Gemini.
+        Supports dynamic clip counting (target_clips=0 or None) based on total video duration.
         Falls back to fallback models on failure, and heuristic algorithm if all else fails.
         """
         words = transcript_data.get("words", [])
         segments = transcript_data.get("segments", [])
         total_duration = total_video_duration or transcript_data.get("duration", 0.0)
 
+        # Dynamic clip calculation if target_clips <= 0
+        if not target_clips or target_clips <= 0:
+            effective_target = compute_dynamic_target_clips(total_duration)
+            is_dynamic = True
+        else:
+            effective_target = target_clips
+            is_dynamic = False
+
         # If no API key configured, use heuristic immediately
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
-            logger.info("No Gemini API key configured. Utilizing local heuristic clip finder.")
+            logger.info(f"No Gemini API key configured. Utilizing local heuristic clip finder (target={effective_target}).")
             if progress_callback:
                 progress_callback("Selecting viral clips via heuristic algorithm (no API key)...", 45)
             clips = find_clips_heuristic(
                 transcript_data=transcript_data,
                 audio_hints=audio_hints,
-                target_clips=target_clips,
+                target_clips=effective_target,
                 min_duration=min_duration,
                 max_duration=max_duration,
                 total_video_duration=total_duration,
@@ -230,6 +239,15 @@ class GeminiProvider(LLMProvider):
         # Build compact transcript
         compact_transcript = format_compact_transcript(segments, audio_hints)
         
+        if is_dynamic:
+            clip_rule = (
+                f"5. DYNAMIC CLIP COUNT: Video duration is {total_duration/60:.1f} minutes. "
+                f"Identify between {min(3, effective_target)} and {effective_target} genuinely high-retention, non-overlapping moments. "
+                f"Do not force filler if moments lack punch, but capture every major hook, revelation, humor, or high-energy debate."
+            )
+        else:
+            clip_rule = f"5. Pick at least {effective_target} non-overlapping clips distributed across the video."
+
         system_instructions = (
             "You are an expert viral content editor for Instagram Reels, YouTube Shorts, and TikTok.\n"
             "Your task is to select the BEST viral, high-retention video clips from the provided transcript.\n\n"
@@ -238,7 +256,7 @@ class GeminiProvider(LLMProvider):
             "2. Each clip MUST be completely self-contained, requiring no prior context.\n"
             "3. The first 3 seconds MUST have a strong hook (intrigue, bold statement, surprise, question).\n"
             "4. Each clip must START at the beginning of a sentence and END at the end of a sentence.\n"
-            f"5. Pick at least {target_clips} non-overlapping clips distributed across the video.\n"
+            f"{clip_rule}\n"
             "6. Multilingual support: If the clip is in Hindi, Telugu, or mixed languages, the title MUST be written in the clip's dominant language.\n"
             "7. Provide for each clip: start, end (seconds), title, hook_line, reason, score (0-100), 5 suggested_hashtags, and description.\n"
         )
@@ -265,13 +283,14 @@ class GeminiProvider(LLMProvider):
                 if parsed and parsed.clips:
                     logger.info(f"Successfully received {len(parsed.clips)} clips from Gemini {model}.")
                     snapped = snap_to_word_boundaries(parsed.clips, words, min_duration, max_duration)
-                    final_clips = deduplicate_and_rank_clips(snapped, target_clips)
+                    final_clips = deduplicate_and_rank_clips(snapped, effective_target)
                     
                     # Ensure minimum count
-                    if len(final_clips) < min(5, target_clips):
+                    min_needed = 2 if total_duration < 180 else min(3, effective_target)
+                    if len(final_clips) < min_needed:
                         logger.warning(f"Gemini returned only {len(final_clips)} clips. Supplementing with heuristic.")
-                        heur = find_clips_heuristic(transcript_data, audio_hints, target_clips, min_duration, max_duration, total_duration)
-                        final_clips = deduplicate_and_rank_clips(final_clips + heur, target_clips)
+                        heur = find_clips_heuristic(transcript_data, audio_hints, effective_target, min_duration, max_duration, total_duration)
+                        final_clips = deduplicate_and_rank_clips(final_clips + heur, effective_target)
                     
                     return final_clips
 
@@ -282,5 +301,6 @@ class GeminiProvider(LLMProvider):
         logger.warning("All Gemini models failed or exhausted quota. Falling back to local heuristic.")
         if progress_callback:
             progress_callback("Gemini unavailable. Generating clips using local heuristic...", 50)
-        clips = find_clips_heuristic(transcript_data, audio_hints, target_clips, min_duration, max_duration, total_duration)
+        clips = find_clips_heuristic(transcript_data, audio_hints, effective_target, min_duration, max_duration, total_duration)
+        return snap_to_word_boundaries(clips, words, min_duration, max_duration)
         return snap_to_word_boundaries(clips, words, min_duration, max_duration)

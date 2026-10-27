@@ -94,19 +94,43 @@ def extract_audio(video_path: Path, output_wav_path: Path, sample_rate: int = 16
         raise RuntimeError(f"FFmpeg audio extraction failed: {proc.stderr}")
     return output_wav_path
 
-def download_video(url: str, dest_dir: Path) -> Path:
-    """Downloads best quality MP4 up to 1080p using yt-dlp with clear error diagnostics."""
+def download_video(url: str, dest_dir: Path, progress_callback: Optional[Any] = None) -> Path:
+    """Downloads best quality MP4 up to 1080p using yt-dlp with clear error diagnostics and live download metrics."""
     import yt_dlp
     dest_dir.mkdir(parents=True, exist_ok=True)
     out_tmpl = str(dest_dir / "source.%(ext)s")
     
+    last_pct = [-1.0]
+
+    def ytdl_hook(d):
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
+            speed = d.get("speed") or 0
+            eta = d.get("eta") or 0
+            speed_mb = speed / (1024 * 1024) if speed else 0.0
+            pct = (downloaded / total * 100.0) if total > 0 else 0.0
+
+            if pct - last_pct[0] >= 3.0 or pct >= 99.0:
+                last_pct[0] = pct
+                total_mb = total / (1024 * 1024) if total > 0 else 0.0
+                down_mb = downloaded / (1024 * 1024)
+                msg = f"[yt-dlp] Downloading: {pct:.1f}% ({down_mb:.1f}MB/{total_mb:.1f}MB at {speed_mb:.1f}MB/s, ETA {int(eta)}s)"
+                if progress_callback:
+                    mapped_pct = 5 + int(pct * 0.12)
+                    progress_callback(msg, mapped_pct)
+        elif d.get("status") == "finished":
+            if progress_callback:
+                progress_callback("[yt-dlp] Video stream download completed. Merging audio/video containers...", 18)
+
     ydl_opts = {
         "format": "bestvideo[vcodec^=avc][height<=1080]+bestaudio[ext=m4a]/bestvideo[vcodec^=h264][height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
         "outtmpl": out_tmpl,
         "merge_output_format": "mp4",
         "noplaylist": True,
-        "quiet": False,
+        "quiet": True,
         "no_warnings": True,
+        "progress_hooks": [ytdl_hook],
     }
     logger.info(f"Downloading video from {url}...")
     try:
@@ -180,8 +204,8 @@ def ingest_source(
         
         # Download
         if progress_callback:
-            progress_callback(f"Downloading from {source[:30]}...", 10)
-        downloaded_video = download_video(source, job_dir)
+            progress_callback(f"[yt-dlp] Initializing download stream for {source[:35]}...", 6)
+        downloaded_video = download_video(source, job_dir, progress_callback=progress_callback)
         if downloaded_video != video_path:
             shutil.move(str(downloaded_video), str(video_path))
     else:

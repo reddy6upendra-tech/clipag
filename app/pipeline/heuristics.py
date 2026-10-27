@@ -11,6 +11,26 @@ HOOK_KEYWORDS = {
     "rule", "first", "always", "stop", "key", "number one", "advice"
 }
 
+def compute_dynamic_target_clips(duration_sec: float) -> int:
+    """
+    Computes optimal number of reels dynamically based on video duration:
+    - Under 3 mins: 2-3 reels
+    - 3-10 mins: 3-5 reels
+    - 10-30 mins: 5-8 reels
+    - 30-90 mins: 8-14 reels
+    - 90+ mins: 12-22 reels
+    """
+    if duration_sec <= 180.0:
+        return max(2, min(3, int(duration_sec / 50.0)))
+    elif duration_sec <= 600.0:
+        return max(3, min(5, int(duration_sec / 100.0)))
+    elif duration_sec <= 1800.0:
+        return max(5, min(8, int(duration_sec / 180.0)))
+    elif duration_sec <= 5400.0:
+        return max(8, min(14, int(duration_sec / 240.0)))
+    else:
+        return max(12, min(22, int(duration_sec / 300.0)))
+
 def find_clips_heuristic(
     transcript_data: Dict[str, Any],
     audio_hints: Optional[Dict[str, Any]] = None,
@@ -23,13 +43,19 @@ def find_clips_heuristic(
     Intelligent heuristic clip selector when Gemini API is unavailable.
     Uses sentence boundaries, question/exclamation marks, hook keywords,
     speech pacing, and audio energy peaks to pick engaging 20-60s reels.
+    Supports dynamic clip count based on video length.
     """
     segments = transcript_data.get("segments", [])
+    duration_val = total_video_duration or transcript_data.get("duration", 0.0) or (segments[-1]["end"] if segments else 180.0)
+    
+    if target_clips is None or target_clips <= 0:
+        target_clips = compute_dynamic_target_clips(duration_val)
+        logger.info(f"Dynamic clip selection mode: targeting {target_clips} reels for {duration_val:.1f}s video.")
+
     if not segments:
         # Fallback if no speech was detected: split video into evenly spaced windows
-        duration = total_video_duration or transcript_data.get("duration", 180.0)
-        clip_len = min(30.0, max(20.0, duration / max(1, target_clips)))
-        step = max(clip_len, duration / target_clips) if target_clips > 0 else 30.0
+        clip_len = min(30.0, max(20.0, duration_val / max(1, target_clips)))
+        step = max(clip_len, duration_val / target_clips) if target_clips > 0 else 30.0
         fallback_clips = []
         for i in range(target_clips):
             s = round(i * step, 2)

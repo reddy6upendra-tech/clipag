@@ -70,9 +70,11 @@ Open `http://127.0.0.1:8000` to:
 
 ### Option 2: Command Line Interface (CLI)
 ```bash
-python -m app.cli --input "https://www.youtube.com/watch?v=YOUR_VIDEO" --clips 6
-# Or on a local video:
-python -m app.cli --input "path/to/podcast.mp4" --clips 6 --style bold_yellow
+# Auto dynamic clip detection based on video length:
+python -m app.cli --input "https://www.youtube.com/watch?v=YOUR_VIDEO" --clips 0
+
+# Translate Telugu/Hindi podcast speech into English captions with Hormozi styling:
+python -m app.cli --input "podcast.mp4" --language te --task translate --style hormozi_bold --position mid_low
 ```
 
 ### Option 3: System Doctor
@@ -114,14 +116,35 @@ python -m app.doctor
 
 ---
 
-## 🎨 Caption Style Presets
+## 🎨 Creator Caption Style Presets
 
-Configured in `config.yaml`:
-1. **Bold Yellow (Reels Pop)**: High-contrast white text with vibrant yellow active word highlight and black border.
-2. **Punchy Neon (MrBeast Vibe)**: High-impact white text with neon green/cyan highlight.
-3. **Cyber Cyan (Clean Tech)**: Sleek modern silver text with cyan highlight.
+Configured in `config.yaml` & available in UI / CLI:
+1. **Bold Yellow (Reels Pop)**: High-contrast white text with vibrant yellow active word highlight and bold black outline.
+2. **MrBeast Red (Punchy Neon Crimson)**: High-energy white text with neon crimson-red glow and deep shadow.
+3. **Cyber Cyan (Tech & Modern Future)**: Sleek modern silver/white text with electric cyan highlight.
+4. **Alex Hormozi (Bold All-Caps Yellow/Green)**: Ultra-heavy bold text with bright neon green active word highlight and thick border.
+5. **Fire Crimson (Fiery Gold & Orange Gradient)**: Fiery orange-red highlight with gold accent.
+6. **Karaoke Gold (Luxury Metallic Gold Glow)**: Metallic gold highlight with soft shadow and crisp white text.
+7. **Emerald Mint (Fresh Aesthetic Vlog Green)**: Fresh emerald mint-green highlight with clean modern stroke.
+8. **Minimal Clean (Crisp Pure White Subtitle)**: Crisp pure white with subtle translucent backdrop for aesthetic vlogs.
 
-All captions maintain the bottom ~22% margin free from overlapping Instagram/TikTok UI controls (likes, comments, captions, sound banner).
+### 📱 Safe Zone Positions & Font Sizes
+- **Lower Third (`bottom` - 22% margin)**: Default reels/shorts safe zone, clears bottom player controls and username tags.
+- **Mid-Lower (`mid_low` - 35% margin)**: Sits safely above long sound descriptions and channel handles.
+- **Center Screen (`center`)**: Maximum retention focus in the center of the screen.
+- **Upper Third (`upper_third`)**: Placed at top 20% to avoid covering gestures or talking heads.
+- **Font Sizes**: Customizable scale from 58px (Compact) to 98px (Extra Large).
+
+### 🌐 Universal English Captions (Any Audio Language)
+Whether the original video is in **Telugu, Hindi, Spanish, French, Tamil, or English**, the engine can natively translate speech directly into fluent English subtitles with word-level millisecond alignment (`task="translate"`). Creators can also choose to preserve the authentic original spoken script.
+
+### 💻 Live Studio Terminal Console Screen
+A real-time, interactive terminal window embedded directly beneath the progress bar streams live operational logs:
+- Exact **yt-dlp download metrics**: speed (MB/s), downloaded megabytes, and remaining ETA.
+- Parallel **Whisper audio chunking progress**: completed chunks and timestamp coverage.
+- **Gemini / heuristic viral selection details**: hook detection and retention scores.
+- **FFmpeg 1080x1920 9:16 reframing progress**: active clip rendering and face-tracking status.
+- Includes auto-scroll, log copy, and terminal clear controls.
 
 ### Multilingual & Indian Script Support
 Automatic font fallback system with bundled Google Noto Sans fonts:

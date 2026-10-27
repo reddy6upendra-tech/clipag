@@ -78,8 +78,23 @@ async def get_app_config():
         {"code": "ml", "name": "Malayalam (മലയാളം)"},
         {"code": "es", "name": "Spanish"},
     ]
+    caption_positions = [
+        {"id": "bottom", "label": "Lower Third (Reels / TikTok Safe)"},
+        {"id": "mid_low", "label": "Mid-Lower (Above Handle Safe)"},
+        {"id": "center", "label": "Center Screen (High Retention Focus)"},
+        {"id": "upper_third", "label": "Upper Third (Top Hook)"},
+    ]
+    font_sizes = [
+        {"size": 58, "label": "Compact (58px)"},
+        {"size": 68, "label": "Medium (68px)"},
+        {"size": 78, "label": "Standard (78px - Recommended)"},
+        {"size": 88, "label": "Large & Bold (88px)"},
+        {"size": 98, "label": "Hormozi Extra Large (98px)"},
+    ]
     return {
         "caption_styles": Config.CAPTION_STYLES,
+        "caption_positions": caption_positions,
+        "font_sizes": font_sizes,
         "default_model": Config.GEMINI_MODEL,
         "fallback_models": Config.GEMINI_FALLBACK_MODELS,
         "default_whisper": Config.WHISPER_MODEL,
@@ -98,10 +113,11 @@ async def run_doctor_api():
 async def create_job(
     url: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    clips: int = Form(6),
+    clips: int = Form(0),
     style: str = Form("bold_yellow"),
     model: str = Form("small"),
     language: str = Form("auto"),
+    task: str = Form("translate"),
     gemini_model: Optional[str] = Form(None),
     position: str = Form("bottom"),
     font_size: Optional[int] = Form(None),
@@ -123,15 +139,19 @@ async def create_job(
     else:
         source_input = url.strip()
 
+    # Dynamic target: 0 indicates AI automatically decides based on video length
+    target_clips = 0 if clips <= 0 else max(2, clips)
+
     job_id = GLOBAL_QUEUE.submit_job(
         source=source_input,
-        target_clips=max(5, clips),
+        target_clips=target_clips,
         caption_style=style,
         whisper_model=model,
         gemini_model=gemini_model,
         caption_position=position,
         font_size=font_size,
         language=language,
+        task=task,
         notify_contact=notify_contact,
     )
 
@@ -140,6 +160,7 @@ async def create_job(
         "job_id": job_id,
         "status": job_info["status"] if job_info else "queued",
         "queue_position": job_info.get("queue_position", 0) if job_info else 0,
+        "logs": job_info.get("logs", []) if job_info else [],
     }
 
 @app.get("/api/jobs/{job_id}")

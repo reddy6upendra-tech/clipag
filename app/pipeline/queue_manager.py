@@ -36,6 +36,7 @@ class JobQueueManager:
         caption_position: str = "bottom",
         font_size: Optional[int] = None,
         language: str = "auto",
+        task: str = "translate",
         notify_contact: Optional[str] = None,
     ) -> str:
         job_id = uuid.uuid4().hex[:12]
@@ -45,6 +46,8 @@ class JobQueueManager:
             status = "queued" if is_queued else "initializing"
             queue_pos = self._queue.qsize() + (1 if self._active_job_id else 0)
 
+            now_str = time.strftime("%H:%M:%S")
+            initial_msg = f"Job {job_id} registered. Target: {target_clips or 'Auto (Dynamic)'} reels | Style: {caption_style} | Whisper: {whisper_model} | Lang: {language} ({task})"
             self._jobs[job_id] = {
                 "id": job_id,
                 "status": status,
@@ -55,6 +58,7 @@ class JobQueueManager:
                 "error": None,
                 "error_stage": None,
                 "result": None,
+                "logs": [{"time": now_str, "stage": "queue" if is_queued else "init", "message": initial_msg}],
                 "notify_contact": notify_contact,
                 "created_at": time.time(),
                 "completed_at": None,
@@ -67,6 +71,7 @@ class JobQueueManager:
                     "caption_position": caption_position,
                     "font_size": font_size,
                     "language": language,
+                    "task": task,
                 }
             }
 
@@ -113,10 +118,43 @@ class JobQueueManager:
                     self._jobs[job_id]["progress"] = progress
                 if active_stage:
                     self._jobs[job_id]["active_stage"] = active_stage
+
+                # Live terminal logs stream
+                now_str = time.strftime("%H:%M:%S")
+                stage_name = active_stage or self._jobs[job_id].get("active_stage", "info")
+                logs = self._jobs[job_id].setdefault("logs", [])
+
+                # Update in-place for active streaming indicators (download % or transcription chunks)
+                is_stream_tick = (
+                    logs and (
+                        ("[yt-dlp] Downloading:" in step and "[yt-dlp] Downloading:" in logs[-1]["message"]) or
+                        ("Processing speech:" in step and "Processing speech:" in logs[-1]["message"]) or
+                        ("Transcribing parallel chunks:" in step and "Transcribing parallel chunks:" in logs[-1]["message"])
+                    )
+                )
+
+                if is_stream_tick:
+                    logs[-1]["time"] = now_str
+                    logs[-1]["message"] = step
+                    logs[-1]["stage"] = stage_name
+                else:
+                    logs.append({
+                        "time": now_str,
+                        "stage": stage_name,
+                        "message": step,
+                    })
+                    if len(logs) > 600:
+                        logs.pop(0)
+
                 if error is not None:
                     self._jobs[job_id]["status"] = "failed"
                     self._jobs[job_id]["error"] = error
                     self._jobs[job_id]["error_stage"] = error_stage or active_stage or "pipeline"
+                    logs.append({
+                        "time": now_str,
+                        "stage": "error",
+                        "message": f"❌ ERROR [{error_stage or active_stage}]: {error}",
+                    })
                 logger.info(f"Job {job_id} [{active_stage}]: {step} ({progress}%)")
 
     def _worker_loop(self):
@@ -160,6 +198,7 @@ class JobQueueManager:
         caption_position = params["caption_position"]
         font_size = params["font_size"]
         language = params.get("language", "auto")
+        task = params.get("task", "translate")
 
         def progress_cb(msg: str, pct: Optional[int]):
             self.update_job(job_id, msg, pct)
@@ -175,12 +214,14 @@ class JobQueueManager:
             total_duration = ingest_res["metadata"]["duration"]
 
             # 2. Transcription
-            self.update_job(job_id, f"Transcribing audio with faster-whisper ({whisper_model}, {language})...", 20, active_stage="transcribe")
+            lang_label = f"{language} -> English captions" if task == "translate" and language != "en" else language
+            self.update_job(job_id, f"Transcribing audio with faster-whisper ({whisper_model}, {lang_label})...", 20, active_stage="transcribe")
             transcript_data = transcribe_audio(
                 audio_path=audio_path,
                 job_dir=job_dir,
                 model_name=whisper_model,
                 language=language,
+                task=task,
                 progress_callback=progress_cb,
             )
 
@@ -237,6 +278,8 @@ class JobQueueManager:
             self.update_job(job_id, "Packaging reels and metadata...", 98, active_stage="package")
             zip_path = package_reels(output_dir, rendered_clips)
             clean_transient_job_files(job_dir)
+
+            self.update_job(job_id, f"Pipeline complete: {len(rendered_clips)} viral vertical reels rendered and packaged in ZIP!", 100, active_stage="complete")
 
             with self._lock:
                 self._jobs[job_id]["status"] = "completed"

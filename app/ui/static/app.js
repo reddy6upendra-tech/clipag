@@ -4,11 +4,13 @@ let currentJobId = null;
 let pollTimer = null;
 let currentContentHash = null;
 let currentClips = [];
+let lastSeenLogCount = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
   initDropZone();
   loadSystemStatus();
   updateRecentJobsCount();
+  updateCaptionPreview();
 
   // Check if URL has ?job=<job_id>
   const urlParams = new URLSearchParams(window.location.search);
@@ -110,12 +112,23 @@ async function startGeneration() {
 
   const numClips = document.getElementById("numClips").value;
   formData.append("clips", numClips);
+  const captionTask = document.getElementById("captionTask");
+  if (captionTask) formData.append("task", captionTask.value);
   formData.append("style", document.getElementById("captionStyle").value);
   formData.append("model", document.getElementById("whisperModel").value);
   formData.append("language", document.getElementById("languageSelect").value);
   formData.append("gemini_model", document.getElementById("geminiModel").value);
   formData.append("position", document.getElementById("captionPosition").value);
   formData.append("font_size", document.getElementById("captionFontSize").value);
+
+  // Reset terminal
+  lastSeenLogCount = 0;
+  const termWin = document.getElementById("terminalWindow");
+  if (termWin) {
+    termWin.innerHTML = `
+      <div class="term-line welcome"><span class="term-prompt">clipag@studio:~$</span> submitting pipeline job...</div>
+    `;
+  }
 
   // Show progress section
   document.getElementById("progressSection").classList.remove("hidden");
@@ -177,6 +190,9 @@ function pollJobStatus(jobId) {
       }
 
       updateProgress(job.progress, job.step, job.active_stage);
+      if (job.logs) {
+        updateTerminalLogs(job.logs);
+      }
 
       if (job.status === "completed") {
         clearInterval(pollTimer);
@@ -593,4 +609,127 @@ function renderRecentJobsList() {
   } catch (e) {
     container.innerHTML = '<p class="empty-hint">Error reading history.</p>';
   }
+}
+
+// Live Caption Preview Widget
+function updateCaptionPreview() {
+  const styleEl = document.getElementById("captionStyle");
+  const posEl = document.getElementById("captionPosition");
+  const sizeEl = document.getElementById("captionFontSize");
+  const box = document.getElementById("previewCaptionBox");
+  const activeWord = document.getElementById("previewActiveWord");
+  const mockup = document.getElementById("previewPhone");
+  if (!box || !activeWord || !styleEl) return;
+
+  const style = styleEl.value;
+  const position = posEl ? posEl.value : "bottom";
+  const fontSize = parseInt(sizeEl ? sizeEl.value : "78") || 78;
+
+  // Scale down for the preview phone mockup box (scale factor ~0.26)
+  const scale = 0.26;
+  const previewFontSize = Math.max(14, Math.round(fontSize * scale));
+  box.style.fontSize = `${previewFontSize}px`;
+
+  // Define style presets matching backend ASS definitions
+  const stylePresets = {
+    bold_yellow: { normal: "#ffffff", active: "#ffe600", outline: "#000000", glow: "#ffe60066" },
+    beast_red: { normal: "#ffffff", active: "#ff2247", outline: "#000000", glow: "#ff224788" },
+    cyber_cyan: { normal: "#ffffff", active: "#00f0ff", outline: "#050814", glow: "#00f0ff77" },
+    hormozi_bold: { normal: "#ffffff", active: "#22ff66", outline: "#000000", glow: "#22ff6688" },
+    fire_crimson: { normal: "#ffffff", active: "#ff4d00", outline: "#150000", glow: "#ff4d0088" },
+    karaoke_gold: { normal: "#f5f5f5", active: "#ffd700", outline: "#1f1800", glow: "#ffd70088" },
+    emerald_mint: { normal: "#ffffff", active: "#00ffaa", outline: "#001a0e", glow: "#00ffaa88" },
+    minimal_clean: { normal: "#ffffff", active: "#ffffff", outline: "#000000", glow: "#ffffff33" },
+  };
+
+  const preset = stylePresets[style] || stylePresets.bold_yellow;
+
+  // Reset base classes and style
+  box.className = `preview-caption-box pos-${position} style-${style}`;
+  box.style.color = preset.normal;
+  box.style.textShadow = `2px 2px 0px ${preset.outline}, -2px -2px 0px ${preset.outline}, 2px -2px 0px ${preset.outline}, -2px 2px 0px ${preset.outline}`;
+
+  activeWord.style.color = preset.active;
+  activeWord.style.textShadow = `0 0 12px ${preset.glow}, 2px 2px 0px ${preset.outline}, -2px -2px 0px ${preset.outline}, 2px -2px 0px ${preset.outline}, -2px 2px 0px ${preset.outline}`;
+}
+
+// Live Terminal Console Streamer
+function appendTerminalLog(logEntry) {
+  const win = document.getElementById("terminalWindow");
+  if (!win) return;
+
+  const line = document.createElement("div");
+  const stage = (logEntry.stage || "info").toLowerCase();
+  line.className = `term-line ${stage}`;
+
+  const timeSpan = `<span class="term-time">[${logEntry.time || '00:00:00'}]</span>`;
+  const tagSpan = `<span class="term-tag tag-${stage}">[${stage.toUpperCase()}]</span>`;
+  const msgText = escapeHtml(logEntry.message || "");
+
+  line.innerHTML = `${timeSpan} ${tagSpan} <span class="term-msg">${msgText}</span>`;
+  win.appendChild(line);
+
+  // Auto-scroll if enabled
+  const autoScroll = document.getElementById("terminalAutoScroll");
+  if (!autoScroll || autoScroll.checked) {
+    win.scrollTop = win.scrollHeight;
+  }
+}
+
+function updateTerminalLogs(logs) {
+  if (!Array.isArray(logs) || logs.length === 0) return;
+
+  const win = document.getElementById("terminalWindow");
+  if (!win) return;
+
+  // If logs length shrunk (new job), clear window
+  if (logs.length < lastSeenLogCount) {
+    win.innerHTML = "";
+    lastSeenLogCount = 0;
+  }
+
+  // Update last line in-place if active stream progress tick
+  if (lastSeenLogCount > 0 && lastSeenLogCount <= logs.length) {
+    const lastRenderedEl = win.lastElementChild;
+    const currentLastLog = logs[lastSeenLogCount - 1];
+    if (lastRenderedEl && currentLastLog) {
+      const stage = (currentLastLog.stage || "info").toLowerCase();
+      lastRenderedEl.className = `term-line ${stage}`;
+      lastRenderedEl.innerHTML = `<span class="term-time">[${currentLastLog.time}]</span> <span class="term-tag tag-${stage}">[${stage.toUpperCase()}]</span> <span class="term-msg">${escapeHtml(currentLastLog.message)}</span>`;
+    }
+  }
+
+  // Append new incoming log lines
+  for (let i = lastSeenLogCount; i < logs.length; i++) {
+    appendTerminalLog(logs[i]);
+  }
+  lastSeenLogCount = logs.length;
+}
+
+function clearTerminalLogs() {
+  const win = document.getElementById("terminalWindow");
+  if (win) {
+    win.innerHTML = `<div class="term-line welcome"><span class="term-prompt">clipag@studio:~$</span> console cleared. Waiting for events...</div>`;
+    lastSeenLogCount = 0;
+  }
+}
+
+function copyTerminalLogs() {
+  const win = document.getElementById("terminalWindow");
+  if (!win) return;
+  const text = win.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    alert("✅ Live terminal console logs copied to clipboard!");
+  }).catch(() => {
+    prompt("Copy terminal logs:", text);
+  });
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }

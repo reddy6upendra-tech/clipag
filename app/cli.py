@@ -20,11 +20,13 @@ logger = logging.getLogger("clipag.cli")
 
 def run_pipeline(
     input_source: str,
-    target_clips: int = 6,
+    target_clips: int = 0,
     caption_style: str = "bold_yellow",
     caption_position: str = "bottom",
     font_size_override: Optional[int] = None,
     whisper_model: str = "small",
+    language: str = "auto",
+    task: str = "translate",
     gemini_model: Optional[str] = None,
     force_recompute: bool = False,
     progress_callback: Optional[Any] = None,
@@ -32,9 +34,9 @@ def run_pipeline(
     """Executes the complete AI Reels Clipper pipeline end-to-end."""
     print("\n================== AI REELS CLIPPER PIPELINE ==================\n")
     print(f"[*] Input: {input_source}")
-    print(f"[*] Target Clips: {target_clips}")
+    print(f"[*] Target Clips: {target_clips or 'Auto (Dynamic based on video length)'}")
     print(f"[*] Caption Style: {caption_style} (Position: {caption_position})")
-    print(f"[*] Whisper Model: {whisper_model}")
+    print(f"[*] Whisper Model: {whisper_model} (Language: {language}, Task: {task})")
 
     # 1. Ingest
     if progress_callback:
@@ -48,15 +50,17 @@ def run_pipeline(
 
     # 2. Transcription
     if progress_callback:
-        progress_callback("Transcribing speech...", 20)
+        progress_callback(f"Transcribing speech ({whisper_model}, {language})...", 20)
     transcript_data = transcribe_audio(
         audio_path=audio_path,
         job_dir=job_dir,
         model_name=whisper_model,
+        language=language,
+        task=task,
         force_recompute=force_recompute,
         progress_callback=progress_callback,
     )
-    print(f"[OK] Transcribed {len(transcript_data['words'])} words in language '{transcript_data['language']}'")
+    print(f"[OK] Transcribed {len(transcript_data['words'])} words in language '{transcript_data['language']}' (task: {task})")
 
     # 3. Clip Selection
     if progress_callback:
@@ -139,8 +143,12 @@ def run_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="AI Reels Clipper: Convert long videos into viral 9:16 vertical reels with captions.")
     parser.add_argument("--input", "-i", required=True, help="YouTube URL or local video file path")
-    parser.add_argument("--clips", "-c", type=int, default=6, help="Target number of clips (default: 6, min: 5)")
-    parser.add_argument("--style", "-s", default="bold_yellow", help="Caption style preset (bold_yellow, beast_red, cyber_cyan)")
+    parser.add_argument("--clips", "-c", type=int, default=0, help="Target number of clips (default: 0 = Auto dynamic)")
+    parser.add_argument("--style", "-s", default="bold_yellow", help="Caption style preset (bold_yellow, beast_red, cyber_cyan, hormozi_bold, fire_crimson, karaoke_gold, emerald_mint, minimal_clean)")
+    parser.add_argument("--position", "-p", default="bottom", help="Caption screen position (bottom, mid_low, center, upper_third)")
+    parser.add_argument("--font-size", type=int, default=None, help="Caption font size in px (58, 68, 78, 88, 98)")
+    parser.add_argument("--language", "-l", default="auto", help="Source audio language (auto, te, hi, en, ta, kn, ml, es)")
+    parser.add_argument("--task", default="translate", choices=["translate", "transcribe"], help="translate (translate any language to English captions) or transcribe")
     parser.add_argument("--model", "-m", default="small", help="faster-whisper model (base, small, medium)")
     parser.add_argument("--gemini-model", help="Gemini model name override")
     parser.add_argument("--force", "-f", action="store_true", help="Force recomputation (ignore cache)")
@@ -149,9 +157,13 @@ def main():
     try:
         run_pipeline(
             input_source=args.input,
-            target_clips=max(5, args.clips),
+            target_clips=args.clips,
             caption_style=args.style,
+            caption_position=args.position,
+            font_size_override=args.font_size,
             whisper_model=args.model,
+            language=args.language,
+            task=args.task,
             gemini_model=args.gemini_model,
             force_recompute=args.force,
         )
