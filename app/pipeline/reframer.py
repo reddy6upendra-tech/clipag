@@ -11,60 +11,126 @@ logger = logging.getLogger("clipag.reframer")
 
 class FaceTracker:
     def __init__(self):
-        # High-performance CPU face tracking using OpenCV CascadeClassifiers
-        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        self.face_cascade = cv2.CascadeClassifier(cascade_path)
-        profile_path = cv2.data.haarcascades + "haarcascade_profileface.xml"
-        self.profile_cascade = cv2.CascadeClassifier(profile_path) if cv2.data.haarcascades else None
+        """
+        High-performance face detector with multiple fallback engines:
+        1. OpenCV CascadeClassifier (if full OpenCV is available)
+        2. MediaPipe Face Detection (if installed)
+        3. Safe Pass-through (returns empty list, triggering blurred-fit/center-crop without crashing)
+        """
+        self.face_cascade = None
+        self.profile_cascade = None
+        self.detector_type = "none"
+
+        # 1. Try OpenCV CascadeClassifier
+        try:
+            if hasattr(cv2, "CascadeClassifier"):
+                haarcascades_dir = getattr(getattr(cv2, "data", None), "haarcascades", None)
+                if haarcascades_dir:
+                    face_path = Path(haarcascades_dir) / "haarcascade_frontalface_default.xml"
+                    profile_path = Path(haarcascades_dir) / "haarcascade_profileface.xml"
+                    if face_path.exists():
+                        self.face_cascade = cv2.CascadeClassifier(str(face_path))
+                        self.detector_type = "opencv"
+                    if profile_path.exists():
+                        self.profile_cascade = cv2.CascadeClassifier(str(profile_path))
+        except Exception as e:
+            logger.warning(f"OpenCV CascadeClassifier unavailable: {e}")
+
+        # 2. Try MediaPipe if OpenCV is not available
+        if not self.face_cascade:
+            try:
+                import mediapipe as mp
+                if hasattr(mp, "solutions") and hasattr(mp.solutions, "face_detection"):
+                    self.mp_detector = mp.solutions.face_detection.FaceDetection(
+                        model_selection=1,
+                        min_detection_confidence=0.5,
+                    )
+                    self.detector_type = "mediapipe"
+            except Exception as e:
+                logger.debug(f"MediaPipe face detection unavailable: {e}")
+
+        logger.info(f"FaceTracker initialized with detector: '{self.detector_type}'")
 
     def detect_faces(self, frame_rgb: np.ndarray, width: int, height: int) -> List[Dict[str, float]]:
         """Returns detected faces with pixel center_x, center_y, width, height, and area."""
-        gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
-        
-        # Scale factor and min neighbors tuned for fast CPU processing
-        raw_faces = self.face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.15,
-            minNeighbors=4,
-            minSize=(int(width * 0.08), int(height * 0.08)),
-        )
-        
         faces = []
-        for (x, y, w, h) in raw_faces:
-            cx_px = float(x + (w / 2.0))
-            cy_px = float(y + (h / 2.0))
-            area = float(w * h)
-            faces.append({
-                "cx": cx_px,
-                "cy": cy_px,
-                "w": float(w),
-                "h": float(h),
-                "area": area,
-                "score": 0.85,
-            })
-            
-        # If no frontal face found, try profile cascade
-        if not faces and self.profile_cascade is not None:
-            profiles = self.profile_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.2,
-                minNeighbors=4,
-                minSize=(int(width * 0.08), int(height * 0.08)),
-            )
-            for (x, y, w, h) in profiles:
-                faces.append({
-                    "cx": float(x + (w / 2.0)),
-                    "cy": float(y + (h / 2.0)),
-                    "w": float(w),
-                    "h": float(h),
-                    "area": float(w * h),
-                    "score": 0.70,
-                })
-                
+
+        # 1. OpenCV Haar Cascades
+        if self.detector_type == "opencv" and self.face_cascade is not None:
+            try:
+                if hasattr(cv2, "cvtColor") and hasattr(cv2, "COLOR_RGB2GRAY"):
+                    gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = np.dot(frame_rgb[..., :3], [0.299, 0.587, 0.114]).astype(np.uint8)
+
+                raw_faces = self.face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.15,
+                    minNeighbors=4,
+                    minSize=(int(width * 0.08), int(height * 0.08)),
+                )
+                for (x, y, w, h) in raw_faces:
+                    faces.append({
+                        "cx": float(x + (w / 2.0)),
+                        "cy": float(y + (h / 2.0)),
+                        "w": float(w),
+                        "h": float(h),
+                        "area": float(w * h),
+                        "score": 0.85,
+                    })
+
+                if not faces and self.profile_cascade is not None:
+                    profiles = self.profile_cascade.detectMultiScale(
+                        gray,
+                        scaleFactor=1.2,
+                        minNeighbors=4,
+                        minSize=(int(width * 0.08), int(height * 0.08)),
+                    )
+                    for (x, y, w, h) in profiles:
+                        faces.append({
+                            "cx": float(x + (w / 2.0)),
+                            "cy": float(y + (h / 2.0)),
+                            "w": float(w),
+                            "h": float(h),
+                            "area": float(w * h),
+                            "score": 0.70,
+                        })
+                return faces
+            except Exception as e:
+                logger.debug(f"OpenCV face detection error: {e}")
+
+        # 2. MediaPipe Face Detection
+        elif self.detector_type == "mediapipe" and hasattr(self, "mp_detector"):
+            try:
+                results = self.mp_detector.process(frame_rgb)
+                if results and results.detections:
+                    for det in results.detections:
+                        bbox = det.location_data.relative_bounding_box
+                        x = max(0.0, bbox.xmin * width)
+                        y = max(0.0, bbox.ymin * height)
+                        w = bbox.width * width
+                        h = bbox.height * height
+                        faces.append({
+                            "cx": float(x + (w / 2.0)),
+                            "cy": float(y + (h / 2.0)),
+                            "w": float(w),
+                            "h": float(h),
+                            "area": float(w * h),
+                            "score": float(det.score[0]) if det.score else 0.85,
+                        })
+                return faces
+            except Exception as e:
+                logger.debug(f"MediaPipe detection error: {e}")
+
+        # 3. Fallback: No detector available, returns empty list
         return faces
 
     def close(self):
-        pass
+        if hasattr(self, "mp_detector") and hasattr(self.mp_detector, "close"):
+            try:
+                self.mp_detector.close()
+            except Exception:
+                pass
 
 def smooth_trajectory(
     timestamps: List[float],
@@ -184,12 +250,27 @@ def analyze_clip_reframing(
             dt = 1.0 / fps_val
             for i, fpath in enumerate(frame_files):
                 curr_time = start_sec + (i * dt)
-                frame_bgr = cv2.imread(str(fpath))
-                if frame_bgr is None:
-                    continue
+                small_rgb = None
+                try:
+                    if hasattr(cv2, "imread"):
+                        frame_bgr = cv2.imread(str(fpath))
+                        if frame_bgr is not None:
+                            if hasattr(cv2, "cvtColor") and hasattr(cv2, "COLOR_BGR2RGB"):
+                                small_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                            else:
+                                small_rgb = frame_bgr[..., ::-1]
+                except Exception:
+                    pass
 
-                fh, fw = frame_bgr.shape[:2]
-                small_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                if small_rgb is None:
+                    try:
+                        from PIL import Image
+                        img = Image.open(str(fpath)).convert("RGB")
+                        small_rgb = np.array(img)
+                    except Exception:
+                        continue
+
+                fh, fw = small_rgb.shape[:2]
                 raw_faces = tracker.detect_faces(small_rgb, fw, fh)
 
                 scale_x = in_w / fw if fw > 0 else 1.0

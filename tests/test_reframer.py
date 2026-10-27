@@ -90,3 +90,11 @@ def test_render_sample_clips_1080x1920(tmp_path):
         ]
         res = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         assert res.stdout.strip() == "1080x1920"
+
+
+def test_face_tracker_resilience(monkeypatch):
+    from app.pipeline.reframer import FaceTracker
+    tracker = FaceTracker()
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    faces = tracker.detect_faces(frame, 100, 100)
+    assert isinstance(faces, list)
