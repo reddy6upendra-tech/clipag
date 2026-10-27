@@ -13,10 +13,12 @@ ingest:
 
 transcription:
   model: "small" # options: "base", "small", "medium"
-  compute_type: "int8"
-  device: "cpu"
+  compute_type: "auto" # "auto" (int8 for CPU, float16 for CUDA)
+  device: "auto" # "auto" (detects CUDA GPU on Colab, CPU locally), "cuda", "cpu"
   vad_filter: true
   beam_size: 1
+  chunk_seconds: 300 # 5-minute parallel chunks for long audio
+  workers: 2 # Number of parallel chunk workers
 
 llm:
   provider: "gemini" # gemini, openai_compatible, ollama

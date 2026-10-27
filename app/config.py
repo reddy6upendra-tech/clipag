@@ -35,6 +35,31 @@ logging.basicConfig(
 
 logger = logging.getLogger("clipag")
 
+def detect_device_and_compute() -> tuple[str, str]:
+    """Auto-detects optimal hardware: CUDA GPU on Google Colab / servers, or CPU."""
+    env_device = os.getenv("WHISPER_DEVICE")
+    env_compute = os.getenv("WHISPER_COMPUTE_TYPE")
+    if env_device:
+        return env_device, env_compute or ("float16" if env_device == "cuda" else "int8")
+
+    yaml_device = _CONFIG.get("transcription", {}).get("device", "auto")
+    yaml_compute = _CONFIG.get("transcription", {}).get("compute_type", "auto")
+    if yaml_device and yaml_device != "auto":
+        return yaml_device, yaml_compute if yaml_compute != "auto" else ("float16" if yaml_device == "cuda" else "int8")
+
+    # Auto-detect CUDA
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            logger.info("⚡ CUDA GPU detected! Using 'cuda' device with 'float16' compute.")
+            return "cuda", "float16"
+    except Exception:
+        pass
+
+    return "cpu", "int8"
+
+_opt_device, _opt_compute = detect_device_and_compute()
+
 class Config:
     BASE_DIR: Path = BASE_DIR
     WORK_DIR: Path = BASE_DIR / _CONFIG.get("app", {}).get("work_dir", "work")
@@ -52,9 +77,11 @@ class Config:
     
     # Transcription
     WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", _CONFIG.get("transcription", {}).get("model", "small"))
-    WHISPER_COMPUTE_TYPE: str = _CONFIG.get("transcription", {}).get("compute_type", "int8")
-    WHISPER_DEVICE: str = _CONFIG.get("transcription", {}).get("device", "cpu")
+    WHISPER_DEVICE: str = _opt_device
+    WHISPER_COMPUTE_TYPE: str = _opt_compute
     WHISPER_VAD_FILTER: bool = _CONFIG.get("transcription", {}).get("vad_filter", True)
+    WHISPER_CHUNK_SECONDS: float = float(os.getenv("WHISPER_CHUNK_SECONDS", _CONFIG.get("transcription", {}).get("chunk_seconds", 300.0)))
+    WHISPER_WORKERS: int = int(os.getenv("WHISPER_WORKERS", _CONFIG.get("transcription", {}).get("workers", 2)))
     
     # LLM
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
